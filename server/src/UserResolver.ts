@@ -8,6 +8,7 @@ import {
 } from 'type-graphql';
 import { User } from './entity/User';
 import { hash, compare } from 'bcryptjs';
+import { sign } from 'jsonwebtoken';
 
 @ObjectType()
 class LoginResponse {
@@ -53,7 +54,7 @@ export class UserResolver {
       throw new Error('유저를 찾을 수 없습니다.');
     }
 
-    const valid = compare(password, user.password);
+    const valid = await compare(password, user.password);
 
     if (!valid) {
       throw new Error('비밀번호 불일치');
@@ -61,8 +62,9 @@ export class UserResolver {
 
     //login successful
     return {
-      accessToken: '',
+      accessToken: sign({ userId: user.id }, 'adsaddasds', {
+        expiresIn: '15m',
+      }),
     };
-    
   }
 } //Resolver

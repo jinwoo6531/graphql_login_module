@@ -1,14 +1,20 @@
 import {
   Arg,
+  Ctx,
   Field,
   Mutation,
   ObjectType,
   Query,
   Resolver,
+  UseMiddleware,
 } from 'type-graphql';
 import { User } from './entity/User';
 import { hash, compare } from 'bcryptjs';
-import { sign } from 'jsonwebtoken';
+import { Mycontext } from './MyContext';
+import { createAccessToken, createRefreshToken } from './auth';
+import { isAuth } from './isAuth';
+import { sendRefreshToken } from './sendRefreshToken';
+import { getConnection } from 'typeorm';
 
 @ObjectType()
 class LoginResponse {
@@ -18,6 +24,14 @@ class LoginResponse {
 
 @Resolver()
 export class UserResolver {
+  @Query(() => String)
+  @UseMiddleware(isAuth)
+  bye(@Ctx() { payload }: Mycontext) {
+    console.log('payload콘솔', payload);
+
+    return `your user id is : ${payload!.userId}`;
+  }
+
   @Query(() => [User])
   users() {
     return User.find();
@@ -43,10 +57,22 @@ export class UserResolver {
     return true;
   }
 
+  @Mutation(() => Boolean)
+  async revokeRefreshTokensForUser(
+    @Arg('userId', () => Number) userId: number
+  ) {
+    await getConnection()
+      .getRepository(User)
+      .increment({ id: userId }, 'tokenVersion', 1);
+
+    return true;
+  }
+
   @Mutation(() => LoginResponse)
   async login(
     @Arg('email') email: string,
-    @Arg('password') password: string
+    @Arg('password') password: string,
+    @Ctx() { res }: Mycontext
   ): Promise<LoginResponse> {
     const user = await User.findOne({ where: { email } });
 
@@ -61,10 +87,11 @@ export class UserResolver {
     }
 
     //login successful
+    //새로고침 해도 쿠키로인해 로그인 유지
+    sendRefreshToken(res, createRefreshToken(user));
+
     return {
-      accessToken: sign({ userId: user.id }, 'adsaddasds', {
-        expiresIn: '15m',
-      }),
+      accessToken: createAccessToken(user),
     };
   }
 } //Resolver
